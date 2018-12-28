@@ -1,34 +1,48 @@
 var request = require('request');
-var http = require('http');
-const express = require('express');
-const mongoose = require('mongoose');
-const bodyParser = require('body-parser');
-const app = express();
+var mysql = require('mysql');
+//var http = require('http');
 
-mongoose.Promise = global.Promise;
-mongoose.connect('mongodb://localhost/broadsign', {
-  useMongoClient:true
-}).then(() => console.log('DB is connected'));
+//const express = require('express');
+//const mongoose = require('mongoose');
+//const bodyParser = require('body-parser');
+//const app = express();
+
+//mongoose.Promise = global.Promise;
+//mongoose.connect('mongodb://localhost/broadsign', {
+//  useMongoClient:true
+//}).then(() => console.log('DB is connected'));
 
 //settings
-app.set('port',process.env.PORT || 3000);
+//app.set('port',process.env.PORT || 3000);
 //app.set('views', path.join('./','views'));
 //app.set('view engine', 'html');
-app.use(express.static(__dirname + '/views'));
+//app.use(express.static(__dirname + '/views'));
 
 //middelware
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({extended:false}))
+//app.use(bodyParser.json());
+//app.use(bodyParser.urlencoded({extended:false}))
 
 //routes
-app.use(require('./routes/index'));
+//app.use(require('./routes/index'));
 //static files
 //app.listen(app.get('port'), () =>{
 //console.log('server on port 3000');
 //})
 
-var auth = "Bearer e03b2732ac76e3a954e4be0c280a04a3";
+console.log("BROADSIGN MONITOR POLL");
 
+var connection = mysql.createConnection({ host : '54.38.184.204', database : 'netmon', user : 'iwall', password : 'iwalldigitalsignage', });
+connection.connect(function(err) {
+if (err) {
+  console.error('Error connecting: ' + err.stack);
+  return;
+}
+console.log('Connected as id ' + connection.threadId); });
+
+
+connection.query("DELETE FROM player_status");
+
+var auth = "Bearer e03b2732ac76e3a954e4be0c280a04a3";
 var url_player_status= 'https://api.broadsign.com:10889/rest/monitor_poll/v2?domain_id=17244398';
 var url_host_by_id= 'https://api.broadsign.com:10889/rest/host/v14/by_id?domain_id=17244398';
 var url_container_info= 'https://api.broadsign.com:10889/rest/container/v9/by_id?domain_id=17244398';
@@ -44,12 +58,7 @@ function match(item, filter) {
   });
 }
 
-
-
-function getPlayerStatus(){
-
-
-  //WEB REQUEST OPTIONS
+//WEB REQUEST OPTIONS
     var options = {
       url: url_player_status,
       method: 'GET',
@@ -130,44 +139,18 @@ function getPlayerStatus(){
           for (var l = 0; l < broadsign_report.length; l++) {
             if (broadsign_report[l]['Container_id'] === json_containers.container[k].id) {
                 broadsign_report[l]['Folder']=json_containers.container[k].name ;
+                console.log("INSERT INTO player_status (player) VALUES (' "+ broadsign_report[l]['Name']+ "');");
+                connection.query("INSERT INTO player_status (player,folder, display_unit, screens, container_id) VALUES (' "+ broadsign_report[l]['Name']+"','"+ broadsign_report[l]['Folder']+"','"+ broadsign_report[l]['Display_unit']+ "','"+  broadsign_report[l]['Screens']+ "','"+ broadsign_report[l]['Container_id'] +"');");
               }
           }
         }
-        //console.log(broadsign_report)
+        console.log(broadsign_report)
+
+
+        connection.end();
+
+
+
       });
     });
 });
-
-}
-
-function resetPlayerStatus(){
-
-delete broadsign_report;
-
-}
-
-http.createServer(function (req, res) {
-
-  res.writeHead(200, {"Content-Type": "application/json"});
-
-  getPlayerStatus();
-
-  var clone = [];
-  for (m in broadsign_report){
-
-    if((broadsign_report[m]['Folder'].includes("EVENTOS")== true)||(broadsign_report[m]['Folder'].includes("RESERVA")== true)||(broadsign_report[m]['Folder'].includes("LIBRES")== true)||(broadsign_report[m]['Folder'].includes("TESTING")== true)){
-      //do nothing
-    }
-    else{
-
-      clone.push({'Folder' : broadsign_report[m]['Folder'] ,
-                'Screens':broadsign_report[m]['Screens'] ,
-                'Name': broadsign_report[m]['Name']
-                     }) ;
-    }
-  }
-  var json_response = JSON.stringify(clone);
-  res.write(json_response); //write a response to the client
-  res.end(); //end the response
-
-}).listen(8080); //the server object listens on port 8080
